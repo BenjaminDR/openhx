@@ -11,7 +11,7 @@ pub use client::{
     DeviceClient, connect_client, is_device_present, reset_shared_device, with_device,
 };
 pub use device::{DEVICE_CATALOG, DeviceProfile, KnownDevice};
-pub use device::{PROFILE_HX_STOMP, PROFILE_HX_STOMP_XL};
+pub use device::{PROFILE_HELIX_FLOOR, PROFILE_HX_STOMP, PROFILE_HX_STOMP_XL};
 pub use error::HxError;
 pub use models::Preset;
 pub use usb::client::Client;
