@@ -203,6 +203,10 @@ impl Client {
         self.handle.write_bulk(EP_OUT, &request, timeout)?;
         self.read_for_seq(seq, &mut buf, timeout)?;
 
+        // Consume the burst of notifications triggered by the device after
+        // the preset change before releasing the endpoint for the next operation.
+        self.drain_stale_data();
+
         Ok(())
     }
 
