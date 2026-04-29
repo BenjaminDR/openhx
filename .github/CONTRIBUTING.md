@@ -43,6 +43,12 @@ Run Just for format before submitting:
 just lint-fix
 ```
 
+If any changes are made to `Cargo.toml`, run `dist generate` before submitting to ensure the Windows build doesn't break:
+
+```bash
+dist generate
+```
+
 ---
 
 ## Protocol Research
