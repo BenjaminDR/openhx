@@ -109,3 +109,77 @@ pub fn build_select_preset_request(seq: u8, bank: u8, preset: u8) -> [u8; 40] {
         0x00, 0x00, 0x00,
     ]
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Byte-offset constants
+    const SEQ_OFFSET: usize = 9;
+    const CMD_OFFSET: usize = 11;
+
+    // Builders
+
+    #[test]
+    fn build_pagination_request_formats_correctly() {
+        let pkt = build_pagination_request(0x08, STREAM_INITIAL_OFFSET);
+
+        assert_eq!(pkt.len(), 16);
+        assert_eq!(pkt[SEQ_OFFSET], 0x08);
+        assert_eq!(pkt[CMD_OFFSET], 0x08); // command: chunk request
+
+        // Offset should be Little-Endian (0x0000_1138 -> 38 11 00 00)
+        assert_eq!(&pkt[12..16], &[0x38, 0x11, 0x00, 0x00]);
+    }
+
+    #[test]
+    fn build_select_preset_request_places_args_correctly() {
+        let bank_idx = 3;
+        let preset_idx = 15;
+        let pkt = build_select_preset_request(0x06, bank_idx, preset_idx);
+
+        assert_eq!(pkt.len(), 40);
+        assert_eq!(pkt[SEQ_OFFSET], 0x06);
+        assert_eq!(pkt[CMD_OFFSET], 0x04); // command: open
+
+        // Validate dynamic payload injection points
+        assert_eq!(pkt[34], bank_idx, "bank index mismatch");
+        assert_eq!(pkt[36], preset_idx, "preset index mismatch");
+    }
+
+    // Static Packets & Sequences
+
+    #[test]
+    fn session_init_sequence_is_ordered_correctly() {
+        let expected_seqs = [0x00u8, 0x02, 0x03, 0x04, 0x05];
+
+        assert_eq!(SESSION_INIT_SEQUENCE.len(), 5);
+        for (packet, &expected) in SESSION_INIT_SEQUENCE.iter().zip(&expected_seqs) {
+            assert_eq!(
+                packet[SEQ_OFFSET], expected,
+                "unexpected seq in session init packet"
+            );
+        }
+    }
+
+    #[test]
+    fn all_packets_use_standard_routing_field() {
+        let all_packets: &[&[u8]] = &[
+            HANDSHAKE,
+            SESSION_OPEN_1,
+            SESSION_CHUNK_1,
+            SESSION_OPEN_2,
+            SESSION_CHUNK_2,
+            OPEN_PRESETS,
+            OPEN_STREAM,
+        ];
+
+        for pkt in all_packets {
+            assert_eq!(
+                &pkt[4..8],
+                &[0x01, 0x10, 0xEF, 0x03],
+                "packet does not carry standard routing field"
+            );
+        }
+    }
+}

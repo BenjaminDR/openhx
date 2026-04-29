@@ -68,34 +68,136 @@ mod tests {
     use super::*;
     use rmpv::Value;
 
+    // Helper functions
+
+    fn encode_preset_bytes(index: u8, name: &str) -> Vec<u8> {
+        let name_null = format!("{name}\0");
+        let name_bytes = name_null.as_bytes();
+        let name_len = name_bytes.len();
+
+        let mut buf = Vec::new();
+        buf.push(0x81); // fixmap(1)
+        buf.push(index); // fixint key = index
+        buf.push(0x81); // fixmap(1)
+        buf.push(MSGPACK_KEY_PRESET_NAME as u8); // fixint 109 = 0x6D
+
+        match name_len {
+            0..=31 => buf.push(0xA0 | name_len as u8),
+            32..=255 => {
+                buf.push(0xD9); // str8
+                buf.push(name_len as u8);
+            }
+            256..=65535 => {
+                buf.push(0xDA); // str16
+                buf.push((name_len >> 8) as u8);
+                buf.push(name_len as u8);
+            }
+            _ => panic!("test preset name too long"),
+        }
+        buf.extend_from_slice(name_bytes);
+        buf
+    }
+
+    fn build_stream(preamble: &[u8], presets: &[(u8, &str)]) -> Vec<u8> {
+        let count = presets.len() as u16;
+        let mut buf = preamble.to_vec();
+        buf.push(0xDC); // array16 tag
+        buf.extend_from_slice(&count.to_be_bytes());
+        for &(index, name) in presets {
+            buf.extend(encode_preset_bytes(index, name));
+        }
+        buf
+    }
+
+    // parse_msgpack_stream tests
+
     #[test]
-    fn test_parse_valid_preset() {
-        let inner_map = Value::Map(vec![(
-            Value::Integer(MSGPACK_KEY_PRESET_NAME.into()),
-            Value::String("Clean Preset\0".into()),
-        )]);
+    fn stream_multiple_presets_round_trip() {
+        let presets = [(0, "Alpha"), (1, "Beta"), (2, "Gamma")];
+        let stream = build_stream(&[], &presets);
+        let result = parse_msgpack_stream(&stream, presets.len() as u16).unwrap();
 
-        let outer_map = Value::Map(vec![(Value::Integer(42.into()), inner_map)]);
-
-        let result = parse_preset(&outer_map);
-        assert!(result.is_ok());
-
-        let preset = result.unwrap();
-
-        assert_eq!(preset.index, 42);
-        assert_eq!(preset.name, "Clean Preset");
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].name, "Alpha");
+        assert_eq!(result[1].name, "Beta");
+        assert_eq!(result[2].name, "Gamma");
     }
 
     #[test]
-    fn test_parse_preset_missing_name() {
-        let inner_map = Value::Map(vec![(
-            Value::Integer(110.into()), // Wrong key
-            Value::String("Clean Preset".into()),
+    fn stream_skips_preamble_bytes() {
+        let preamble = &[0x00, 0xFF, 0x42, 0x13, 0x37];
+        let stream = build_stream(preamble, &[(5, "Crunch")]);
+        let result = parse_msgpack_stream(&stream, 1).unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].index, 5);
+        assert_eq!(result[0].name, "Crunch");
+    }
+
+    #[test]
+    fn stream_null_terminator_is_stripped_from_name() {
+        // Firmware often pads with nulls; we must strip them
+        let stream = build_stream(&[], &[(0, "Solo\0\0")]);
+        let result = parse_msgpack_stream(&stream, 1).unwrap();
+
+        assert!(!result[0].name.contains('\0'));
+        assert_eq!(result[0].name, "Solo");
+    }
+
+    #[test]
+    fn stream_marker_not_found_returns_error() {
+        let garbage = vec![0x00u8, 0x01, 0x02, 0xFF, 0xAB];
+        let err = parse_msgpack_stream(&garbage, 128).unwrap_err();
+        assert!(matches!(err, HxError::InvalidStreamMarker));
+    }
+
+    // parse_preset tests
+
+    #[test]
+    fn preset_valid_parses_correctly() {
+        let inner = Value::Map(vec![(
+            Value::Integer(MSGPACK_KEY_PRESET_NAME.into()),
+            Value::String("Crunch\0".into()),
         )]);
+        let outer = Value::Map(vec![(Value::Integer(42.into()), inner)]);
 
-        let outer_map = Value::Map(vec![(Value::Integer(42.into()), inner_map)]);
+        let preset = parse_preset(&outer).unwrap();
+        assert_eq!(preset.index, 42);
+        assert_eq!(preset.name, "Crunch");
+    }
 
-        let result = parse_preset(&outer_map);
-        assert!(result.is_err());
+    #[test]
+    fn preset_extra_keys_in_inner_map_are_ignored() {
+        // Ensures resilience against future firmware adding new data fields
+        let inner = Value::Map(vec![
+            (Value::Integer(1u64.into()), Value::Integer(999.into())),
+            (
+                Value::Integer(MSGPACK_KEY_PRESET_NAME.into()),
+                Value::String("Jazz\0".into()),
+            ),
+            (Value::Integer(200u64.into()), Value::Boolean(true)),
+        ]);
+        let outer = Value::Map(vec![(Value::Integer(0u64.into()), inner)]);
+
+        let preset = parse_preset(&outer).unwrap();
+        assert_eq!(preset.name, "Jazz");
+    }
+
+    #[test]
+    fn preset_item_not_a_map_returns_error() {
+        let item = Value::Integer(42.into());
+        let err = parse_preset(&item).unwrap_err();
+        assert!(matches!(err, HxError::Protocol(_)));
+    }
+
+    #[test]
+    fn preset_name_key_missing_returns_error() {
+        let inner = Value::Map(vec![(
+            Value::Integer(110u64.into()), // Wrong key
+            Value::String("Name\0".into()),
+        )]);
+        let outer = Value::Map(vec![(Value::Integer(0u64.into()), inner)]);
+        let err = parse_preset(&outer).unwrap_err();
+        assert!(matches!(err, HxError::Protocol(_)));
     }
 }
