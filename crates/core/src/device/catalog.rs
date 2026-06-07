@@ -3,7 +3,7 @@ use super::profile::DeviceProfile;
 pub const PROFILE_HX_STOMP: DeviceProfile = DeviceProfile {
     name: "HX Stomp",
     vendor_id: 0x0E41,
-    product_id: 0x4252, // unverified
+    product_id: 0x4246,
     preset_count: 126,
 };
 
