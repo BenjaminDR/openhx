@@ -1,6 +1,6 @@
 [workspace.package]
 description = "A cross-platform Rust GUI and CLI for controlling Line 6 HX and Helix devices."
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Allan Somensi <allansomensidev@proton.me>"]
 documentation = "https://github.com/allansomensi/openhx"
 homepage = "https://github.com/allansomensi/openhx"
