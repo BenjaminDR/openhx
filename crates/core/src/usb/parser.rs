@@ -75,11 +75,12 @@ mod tests {
         let name_bytes = name_null.as_bytes();
         let name_len = name_bytes.len();
 
-        let mut buf = Vec::new();
-        buf.push(0x81); // fixmap(1)
-        buf.push(index); // fixint key = index
-        buf.push(0x81); // fixmap(1)
-        buf.push(MSGPACK_KEY_PRESET_NAME as u8); // fixint 109 = 0x6D
+        let mut buf = vec![
+            0x81,                          // fixmap(1)
+            index,                         // fixint key = index
+            0x81,                          // fixmap(1)
+            MSGPACK_KEY_PRESET_NAME as u8, // fixint 109 = 0x6D
+        ];
 
         match name_len {
             0..=31 => buf.push(0xA0 | name_len as u8),

@@ -78,7 +78,7 @@ mod tests {
 
     #[test]
     fn presets_sort_by_index_then_name() {
-        let mut presets = vec![
+        let mut presets = [
             Preset::new(10, "Zebra"),
             Preset::new(0, "Alpha"),
             Preset::new(10, "Beta"),
